@@ -14,12 +14,13 @@ app.post("/link/", async (req, res) => {
   // Here you can process the URL and generate JSON data
   // For demonstration, let's just send back a sample JSON response
   const pages = await main(url);
+  console.log(pages.invalid);
   const jsonData = {
     message: "Received URL",
     receivedUrl: url,
-    internalLinks: [],
-    externalLinks: [],
-    pages,
+    internalLinks: pages.internalLinks,
+    externalLinks: pages.externalLinks,
+    invalid: pages.invalid,
   };
 
   res.json(jsonData);

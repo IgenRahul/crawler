@@ -3,36 +3,37 @@ const { JSDOM } = require("jsdom");
 async function crawlPage(baseURL, currentURL, pages) {
   const baseURLObj = new URL(baseURL);
   const currentURLObj = new URL(currentURL);
-  if (baseURLObj.hostname !== currentURLObj.hostname) {
-    return pages;
-  }
-
   const normalisedCurrentURL = normaliseURL(currentURL);
-  if (pages[normalisedCurrentURL] > 0) {
-    pages[normalisedCurrentURL]++;
+  if (baseURLObj.hostname !== currentURLObj.hostname) {
+    if (pages.externalLinks[normalisedCurrentURL] > 0) {
+      pages.externalLinks[normalisedCurrentURL]++;
+    } else {
+      pages.externalLinks[normalisedCurrentURL] = 1;
+    }
     return pages;
   }
 
-  pages[normalisedCurrentURL] = 1;
-  console.log("Actively Crawling:", currentURL);
+  if (pages.internalLinks[normalisedCurrentURL] > 0) {
+    pages.internalLinks[normalisedCurrentURL]++;
+    return pages;
+  }
+
+  pages.internalLinks[normalisedCurrentURL] = 1;
 
   try {
     const res = await fetch(currentURL);
     if (res.status > 399) {
-      console.log(
-        `Error in fetch with status code: ${res.status} on page : ${currentURL}`
-      );
       return pages;
     }
     const contentType = res.headers.get("content-type");
     if (!contentType.includes("text/html")) {
-      console.log(`No HTML content found on page: ${currentURL}`);
       return pages;
     }
     const htmlBody = await res.text();
-    const nextURLs = getURLsFromHTML(htmlBody, baseURL);
-    for(const nextURL of nextURLs) {
-        pages = await crawlPage(baseURL, nextURL, pages);
+    const { nextURLs, invalid } = getURLsFromHTML(htmlBody, baseURL);
+    pages.invalid += invalid;
+    for (const nextURL of nextURLs) {
+      pages = await crawlPage(baseURL, nextURL, pages);
     }
   } catch (e) {
     console.log(`error in Fetch ${e.message} on page : ${currentURL}`);
@@ -41,7 +42,8 @@ async function crawlPage(baseURL, currentURL, pages) {
 }
 
 function getURLsFromHTML(htmlBody, baseURL) {
-  const urls = [];
+  const nextURLs = [];
+  let invalid = 0;
   const dom = new JSDOM(htmlBody);
   const linkElements = dom.window.document.querySelectorAll("a");
 
@@ -51,21 +53,21 @@ function getURLsFromHTML(htmlBody, baseURL) {
       // relative URL and invalid url
       try {
         const urlObj = new URL(`${baseURL}${href}`);
-        urls.push(urlObj.href);
+        nextURLs.push(urlObj.href);
       } catch (e) {
-        console.log(e);
+        invalid++;
       }
     } else {
       // absolute URL
       try {
         const urlObj = new URL(href);
-        urls.push(urlObj.href);
+        nextURLs.push(urlObj.href);
       } catch (e) {
-        console.log(e);
+        invalid++;
       }
     }
   });
-  return urls;
+  return { nextURLs, invalid };
 }
 
 function normaliseURL(urlString) {
